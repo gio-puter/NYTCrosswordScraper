@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./SearchResults.css"
+import supabase from "../supabase";
 
 function SearchResults() {
     const [result, setResult] = useState(null);
     const [error, setError] = useState(null);
-    const [serverError, setServerError] = useState(null)
 
     const [inputClue, setInputClue] = useState("");
     const [inputAnswerLength, setInputAnswerLength] = useState("");
@@ -27,72 +27,83 @@ function SearchResults() {
         }
     }, [location.search])
 
+
     async function fetchAnswers() {
-        await fetch(`/get-answers?clue=${encodeURIComponent(clue)}&answerLength=${encodeURIComponent(answerLength)}`)
-        .then(response => {
-            return response.text().then(answers => ({ok: response.ok, status: response.status, answers}))
-        })
-        .then(response => {
-            try {
-                response.answers = JSON.parse(response.answers)
-            } catch (err) {
+        const {data, error} = await supabase.rpc('fetch_answers', {word : clue, answer_length: answerLength})
 
+        if (error) {
+            // console.error('Error fetching data', error)
+            switch (error.code) {
+                case '22P02':
+                    setError(<p style={{ color: "red" }}>INVALID PARAMETERS</p>)
+                    break;
+                case '08003':
+                    setError(<p style={{ color: "red" }}>DATABASE CONNECTION ERROR. TRY AGAIN LATER</p>)
+                    break;
+                default:
+                    setError(<p style={{ color: "red" }}>UNEXPECTED ERROR. TRY A DIFFERENT INPUT</p>)
+                    break;
             }
 
-            console.log(response)
+            setResult(null);
+        } else {
+            // console.log('Data: ', data)
 
-            if (!response.ok) {
-                setError(<p style={{ color: "red" }}>{response.answers}</p>)
+            if (data.length === 0) {
+                setError(<p style={{ color: "red" }}>NO ANSWERS FOUND FOR: {clue}</p>)
                 setResult(null)
-                setServerError(null)
-            } else {
-                let out = []
-                response.answers.forEach(set => {
-                    out.push(<p key={out.length}>{set.answer}</p>)
-                });
-                setResult(out)
-                setError(null)
-                setServerError(null)
+                return data;
             }
-        })
-        .catch(() => {
-            setServerError(<p style={{ color: "red" }}>Couldn't connect to server</p>)
+
+            let out = []
+            data.forEach(row => {
+                out.push(<p key={out.length}>{row.answer}</p>)
+            })
+
+            // console.log(out)
+            setResult(out)
             setError(null)
-        })
+            return data
+        }
     }
 
     async function fetchClues() {
-        await fetch(`/get-clues?answer=${encodeURIComponent(answer)}`)
-        .then(response => {
-            return response.text().then(clues => ({ok: response.ok, status: response.status, clues}))
-        })
-        .then(response => {
-            try {
-                response.clues = JSON.parse(response.clues)
-            } catch (err) {
-
+        const {data, error} = await supabase.rpc('fetch_clues', {word: answer})
+        
+        if (error) {
+            // console.error('Error fetching data', error)
+            switch (error.code) {
+                case '22P02':
+                    setError(<p style={{ color: "red" }}>INVALID PARAMETERS</p>)
+                    break;
+                case '08003':
+                    setError(<p style={{ color: "red" }}>DATABASE CONNECTION ERROR. TRY AGAIN LATER</p>)
+                    break;
+                default:
+                    setError(<p style={{ color: "red" }}>UNEXPECTED ERROR. TRY A DIFFERENT INPUT</p>)
+                    break;
             }
 
-            console.log(response)
+            setResult(null);
 
-            if (!response.ok) {
-                setError(<p style={{ color: "red" }}>{response.clues}</p>)
+        } else {
+            // console.log('Data: ', data)
+
+            if (data.length === 0) {
+                setError(<p style={{ color: "red" }}>NO CLUES FOUND FOR: {answer}</p>)
                 setResult(null)
-                setServerError(null)
-            } else {
-                let out = []
-                response.clues.forEach(set => {
-                    out.push(<p key={out.length}>{set.clue}</p>)
-                });
-                setResult(out)
-                setError(null)
-                setServerError(null)
+                return data;
             }
-        })
-        .catch(() => {
-            setServerError(<p style={{ color: "red" }}>Couldn't connect to server</p>)
+
+            let out = []
+            data.forEach(row => {
+                out.push(<p key={out.length}>{row.clue}</p>)
+            })
+
+            setResult(out)
             setError(null)
-        })
+            return data
+        }
     }
 
     function handleClueSearch() {
@@ -136,11 +147,10 @@ function SearchResults() {
             </div>
 
             {error && (<div>{error}</div>)}
-            {serverError && (<div>{serverError}</div>)}
 
-            {clue && (<div><p>Showing answer(s) to: {clue}</p></div>)}
-            {answer && (<div><p>Showing clue(s) for: {answer}</p></div>)}
-            {result && (<div>{result}</div>)}
+            {clue && !error && (<div><p>Showing answer(s) to: {clue}</p></div>)}
+            {answer && !error && (<div><p>Showing clue(s) for: {answer}</p></div>)}
+            {result && !error && (<div>{result}</div>)}
 
         </>
     );

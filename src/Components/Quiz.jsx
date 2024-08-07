@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import "./Quiz.css"
+import supabase from "../supabase";
 
 function Quiz() {
 
     const [clue, setClue] = useState(null);
     const [answerLength, setAnswerLength] = useState(null);
+    const [answer, setAnswer] = useState(null);
 
     const [inputAnswer, setInputAnswer] = useState("");
 
@@ -20,61 +22,45 @@ function Quiz() {
     }, [location.search]);
 
     async function fetchClue() {
-        await fetch(`/random-clue`)
-        .then(response => {
-            return response.text().then(row => ({ok: response.ok, status: response.status, row}))
-        })
-        .then(response => {
-            try {
-                response.row = JSON.parse(response.row)
-            } catch (err) {
+        const {data, error} = await supabase.rpc('fetch_random');
 
-            }
-
-            console.log(response)
-
-            if (!response.ok) {
-                // setError(<p style={{ color: "red" }}>{response.clue}</p>)
-                // setResult(null)
-                // setServerError(null)
-            } else {
-                setClue(response.row.clue)
-                setAnswerLength(response.row.answer.length)
-                // let out = []
-                // response.clue.forEach(set => {
-                //     out.push(<p key={out.length}>{set.clue}</p>)
-                // });
-                // setResult(null)
-                setAnswerResponse(null)
-                setInputAnswer("")
-                // setServerError(null)
-            }
-        })
-        .catch(() => {
-            // setServerError(<p style={{ color: "red" }}>Couldn't connect to server</p>)
-            // setError(null)
-        })
+        if (error) {
+            // console.error('Error fetching data', error);
+        } else {
+            // console.log('Data: ', data[0]);
+            setClue(data[0].clue);
+            setAnswer(data[0].answer)
+            setAnswerLength(data[0].answer.length);
+            setInputAnswer('');
+            return data;
+        }
     }
 
     async function handleAnswerSearch() {
+        if (inputAnswer === answer) {
+            setAnswerResponse(<p style={{ color: "green" }}>Correct!</p>)
+            return
+        }
+
         if (inputAnswer.length !== answerLength) {
             setAnswerResponse(<p style={{ color: "red" }}>Wrong answer length!</p>)
             return;
         }
-        
-        let searchString = `/check-answer/?clue=${encodeURIComponent(clue)}&answer=${encodeURIComponent(inputAnswer.toUpperCase())}&answerLength=${encodeURIComponent(answerLength)}`
-        
-        await fetch(searchString)
-        .then(response => {
-            console.log(response)
-            if (response.status === 200) {
+
+        const {data, error} = await supabase.rpc('check_answer', {clue: clue, answer: inputAnswer.toUpperCase()})
+
+        if (error) {
+            // console.error('Error fetching data', error);
+        } else {
+            // console.log(data)
+            if (data) {
                 setAnswerResponse(<p style={{ color: "green" }}>Correct!</p>)
             } else {
                 setAnswerResponse(<p style={{ color: "red" }}>Incorrect!</p>)
             }
-        })
+            return data;
+        }
     }
-
 
     function handleAnswerKeyDown(event) {
         if (event.key === "Enter" && inputAnswer) {handleAnswerSearch()}
